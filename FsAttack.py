@@ -88,87 +88,84 @@ class AttackSuccessChecker:
                 return False
         return True
 
-# 【全新函数】取代旧的随机搜索，采用更高效的优化式搜索
-def optimization_based_search(model, tokenizer, conv_template, instruction, target, demo_pool, num_steps, shots, batch_size, top_k=256):
+# FsAttack.py 文件中的 optimization_based_search 函数（新版）
+
+def optimization_based_search(model, tokenizer, conv_template, instruction, target, demo_pool, num_steps, shots, batch_size, micro_batch_size, top_k=256):
     """
     执行基于优化的批量搜索，并返回详细日志。
+    【v2版】：增加了微批次处理逻辑以节省显存。
     """
-    print(f"  >>> 正在执行优化式搜索 (步数:{num_steps}, 批大小:{batch_size}, TopK:{top_k})...")
+    print(f"  >>> 正在执行优化式搜索 (步数:{num_steps}, 批大小:{batch_size}, 微批次:{micro_batch_size}, TopK:{top_k})...")
     
-    # 【新增】步骤1: 截断对齐所有示例
+    # ... (函数开头的示例预处理、变量初始化等保持不变) ...
     print("  >>> 正在预处理和截断对齐示例池...")
     toks_list = [tokenizer.encode(d, add_special_tokens=False) for d in demo_pool]
     min_len = min(len(t) for t in toks_list)
     truncated_demo_pool = [tokenizer.decode(t[:min_len]) for t in toks_list]
     print(f"  >>> 示例池处理完毕，所有示例已对齐到长度: {min_len} tokens。")
 
-    # 初始化控制变量（即我们选择的 `shots` 个示例的索引）
     best_indices = torch.randint(0, len(truncated_demo_pool), (shots,)).to(model.device)
     best_loss = float('inf')
     
     log_list = []
     checker = AttackSuccessChecker()
-
     pbar = tqdm(range(num_steps), desc="优化式搜索进度")
+
     for step in pbar:
-        # 【新增】步骤2: 生成一批候选者
-        # 通过在当前最佳索引上进行微小扰动来生成一批新的候选索引
+        # ... (候选者生成逻辑 candidate_indices_batch 保持不变) ...
         candidate_indices_batch = [best_indices]
         for _ in range(batch_size - 1):
             temp_indices = best_indices.clone()
-            # 随机选择一个位置进行替换
             replace_pos = random.randint(0, shots - 1)
-            # 从TopK（或整个池子）中随机选择一个新的示例索引
             candidate_options = torch.topk(torch.ones(len(truncated_demo_pool),), k=min(top_k, len(truncated_demo_pool))).indices
             new_idx = candidate_options[random.randint(0, len(candidate_options)-1)]
             temp_indices[replace_pos] = new_idx
             candidate_indices_batch.append(temp_indices)
 
-        # 【新增】步骤3: 批量评估候选者的Loss
-        losses = []
+        # 准备所有候选者的 prompt
         adv_prompts_list = []
+        for indices in candidate_indices_batch:
+            demos = [truncated_demo_pool[i] for i in indices]
+            adv_string = ''.join(demos) + instruction
+            adv_prompts_list.append(adv_string)
+
+        all_losses = []
         with torch.no_grad():
-            for indices in candidate_indices_batch:
-                # 从索引构建拼接后的演示字符串
-                demos = [truncated_demo_pool[i] for i in indices]
-                adv_string = ''.join(demos) + instruction
-                adv_prompts_list.append(adv_string)
+            # 【核心修改】在这里实现微批次循环
+            for i in range(0, len(adv_prompts_list), micro_batch_size):
+                # 获取当前微批次
+                micro_batch_prompts = adv_prompts_list[i:i+micro_batch_size]
+                
+                input_ids_list, labels_list = [], []
+                for adv_prompt in micro_batch_prompts:
+                    manager = AdversarialPromptManager(tokenizer, conv_template, instruction, target, adv_prompt)
+                    input_ids, labels = manager.get_inputs_and_labels()
+                    input_ids_list.append(input_ids)
+                    labels_list.append(labels)
+                
+                # 对微批次进行填充和计算
+                padded_input_ids = pad_sequence(input_ids_list, batch_first=True, padding_value=tokenizer.pad_token_id).to(model.device)
+                padded_labels = pad_sequence(labels_list, batch_first=True, padding_value=-100).to(model.device)
 
-            # 准备批量计算loss
-            input_ids_list, labels_list = [], []
-            for adv_prompt in adv_prompts_list:
-                manager = AdversarialPromptManager(tokenizer, conv_template, instruction, target, adv_prompt)
-                input_ids, labels = manager.get_inputs_and_labels()
-                input_ids_list.append(input_ids)
-                labels_list.append(labels)
-            
-            # 使用pad_sequence进行填充，使批次内张量长度一致
-            padded_input_ids = pad_sequence(input_ids_list, batch_first=True, padding_value=tokenizer.pad_token_id).to(model.device)
-            padded_labels = pad_sequence(labels_list, batch_first=True, padding_value=-100).to(model.device)
-
-            # 批量计算loss
-            outputs = model(input_ids=padded_input_ids, labels=padded_labels)
-            # 对每个样本的loss进行规范化
-            shift_logits = outputs.logits[..., :-1, :].contiguous()
-            shift_labels = padded_labels[..., 1:].contiguous()
-            loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-            loss = loss.view(shift_logits.size(0), -1).sum(dim=1) / (shift_labels != -100).sum(dim=1)
-            losses.extend(loss.tolist())
-
-        # 【新增】步骤4: 择优更新
-        min_loss_in_batch = min(losses)
-        best_candidate_idx_in_batch = losses.index(min_loss_in_batch)
+                outputs = model(input_ids=padded_input_ids, labels=padded_labels)
+                
+                shift_logits = outputs.logits[..., :-1, :].contiguous()
+                shift_labels = padded_labels[..., 1:].contiguous()
+                loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+                loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                loss = loss.view(shift_logits.size(0), -1).sum(dim=1) / (shift_labels != -100).sum(dim=1)
+                all_losses.extend(loss.tolist())
+        
+        # ... (后续的择优更新、日志记录、打印等逻辑保持不变) ...
+        min_loss_in_batch = min(all_losses)
+        best_candidate_idx_in_batch = all_losses.index(min_loss_in_batch)
         
         if min_loss_in_batch < best_loss:
             best_loss = min_loss_in_batch
             best_indices = candidate_indices_batch[best_candidate_idx_in_batch]
 
-        # 生成响应并判断是否成功，用于记录日志
         best_demos_this_step = [truncated_demo_pool[i] for i in best_indices]
         final_adv_string = ''.join(best_demos_this_step) + instruction
-        
-        # 使用AdversarialPromptManager获取用于生成的input_ids
         final_manager = AdversarialPromptManager(tokenizer, conv_template, instruction, target, final_adv_string)
         prompt_for_gen = final_manager.get_prompt()
         final_input_ids = tokenizer(prompt_for_gen, return_tensors="pt").input_ids
