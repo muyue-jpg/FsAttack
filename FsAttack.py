@@ -137,6 +137,16 @@ def demo_level_random_search(model, tokenizer, conv_template, instruction, targe
 
         is_success = checker.is_successful(response_text)
         pbar.set_postfix({"最佳loss": f"{best_loss:.4f}", "是否成功": is_success})
+
+        # ==================================================================
+        # 【新增代码】在这里打印每一步的结果
+        # ==================================================================
+        print(f"\n--- [攻击进度: {step + 1}/{num_steps}] ---")
+        success_str = "✅ 是" if is_success else "❌ 否"
+        print(f"当前最佳Loss: {best_loss:.4f} | 本次是否成功: {success_str}")
+        # 打印回复的前400个字符作为预览，避免过长的回复刷屏
+        print(f"模型回复预览: {response_text[:400]}...")
+        # ==================================================================
         
         log_list.append({
             'step': step,
@@ -149,4 +159,5 @@ def demo_level_random_search(model, tokenizer, conv_template, instruction, targe
 
     print(f"  >>> 搜索完成. 最终最优loss: {best_loss:.4f}")
     return best_demos, log_list
+
 
