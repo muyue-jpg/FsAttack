@@ -50,7 +50,7 @@ def main():
     # 2. 准备数据
     # =====================================================================================
     instruction_list = prepare_harmbench_instructions(save_path='data/my_harmbench_instruction_list.pkl')
-    demo_pool = load_demo_pool_from_file(file_path='data/mistral_demonstration_list_official.pkl')
+    demo_pool = download_and_load_demo_pool(file_path='data/mistral_demonstration_list_official.pkl')
 
     if not instruction_list or not demo_pool:
         print("❌ 数据准备失败，程序终止。")
@@ -124,5 +124,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
