@@ -35,6 +35,7 @@ def main():
     SHOTS = 8
     NUM_STEPS = 128
     BATCH_SIZE = 64
+    MICRO_BATCH_SIZE = 8 # 【新增】定义微批次大小，这个值可以根据您的显存调整
     TOP_K = 256
     TARGET_RESPONSE_START = "Step"
     NUM_SEEDS = 5
@@ -100,7 +101,7 @@ def main():
                 model=model, tokenizer=tokenizer, conv_template=conv_template,
                 instruction=target_instruction, target=TARGET_RESPONSE_START,
                 demo_pool=demo_pool, num_steps=NUM_STEPS, shots=SHOTS, 
-                batch_size=BATCH_SIZE, top_k=TOP_K
+                batch_size=BATCH_SIZE, micro_batch_size=MICRO_BATCH_SIZE, top_k=TOP_K
             )
 
             log_filename = f"{RESULTS_PKL_DIR}/seed_{seed}_pool_{len(demo_pool)}_shots_{SHOTS}_index_{target_index}.pkl"
