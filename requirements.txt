@@ -8,8 +8,9 @@ requests
 numpy
 scipy
 sentencepiece
-transformers==4.28.1
+#transformers==4.28.1
 ml_collections
 fschat==0.2.23
+
 
 
