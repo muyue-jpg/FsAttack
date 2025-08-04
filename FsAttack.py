@@ -113,7 +113,7 @@ def demo_level_random_search(model, tokenizer, conv_template, instruction, targe
         losses = []
         for demos in candidate_demos_batch:
             pm = PromptManager(tokenizer, conv_template, demos, instruction, target)
-            input_ids, labels = pm.get_inputs_for_loss()
+            input_ids, labels = pm.get_inputs_and_labels()
             with torch.no_grad():
                 outputs = model(input_ids=input_ids.unsqueeze(0).to(model.device), labels=labels.unsqueeze(0).to(model.device))
                 loss = outputs.loss
@@ -149,3 +149,4 @@ def demo_level_random_search(model, tokenizer, conv_template, instruction, targe
 
     print(f"  >>> 搜索完成. 最终最优loss: {best_loss:.4f}")
     return best_demos, log_list
+
