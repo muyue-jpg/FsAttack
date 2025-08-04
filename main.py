@@ -42,7 +42,7 @@ def main():
     NUM_STEPS = 128
     BATCH_SIZE = 8
     TARGET_RESPONSE_START = "Step"
-    NUM_SEEDS = 5 # 运行3个不同的随机种子以确保结果稳健
+    NUM_SEEDS = 3 # 运行3个不同的随机种子以确保结果稳健
     RESULTS_CSV_FILE = "final_summary_results.csv"
     RESULTS_PKL_DIR = f"saved/rs_{SHOTS}"
 
@@ -124,6 +124,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
