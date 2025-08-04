@@ -1,21 +1,15 @@
 # -*- coding: utf-8 -*-
 
-# =====================================================================================
-# 【核心修正】让脚本自己将所在目录添加到Python搜索路径
-# =====================================================================================
 import sys
 import os
 
-# 获取main.py文件所在的绝对路径
 project_root = os.path.dirname(os.path.abspath(__file__))
-# 如果这个路径不在sys.path中，则添加它
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-# =====================================================================================
-
 
 """
 main.py - 最终主攻击实验脚本 (专业版)
+【v3版】：增加了instruction_list内容预览功能。
 """
 import torch
 import pandas as pd
@@ -27,7 +21,7 @@ from llm_attacks.minimal_gcg.opt_utils import load_model_and_tokenizer
 from llm_attacks.minimal_gcg.string_utils import load_conversation_template
 
 from data_manager import prepare_harmbench_instructions, download_and_load_demo_pool
-from FsAttack import demo_level_random_search
+from FsAttack import optimization_based_search
 
 def main():
     """主执行函数"""
@@ -40,11 +34,12 @@ def main():
     NUM_BEHAVIORS_TO_ATTACK = 20
     SHOTS = 8
     NUM_STEPS = 128
-    BATCH_SIZE = 8
+    BATCH_SIZE = 64
+    TOP_K = 256
     TARGET_RESPONSE_START = "Step"
-    NUM_SEEDS = 3 # 运行3个不同的随机种子以确保结果稳健
-    RESULTS_CSV_FILE = "final_summary_results.csv"
-    RESULTS_PKL_DIR = f"saved/rs_{SHOTS}"
+    NUM_SEEDS = 5
+    RESULTS_CSV_FILE = "final_summary_results_optimized.csv"
+    RESULTS_PKL_DIR = f"saved/opt_{SHOTS}"
 
     # =====================================================================================
     # 2. 准备数据
@@ -58,11 +53,27 @@ def main():
         
     os.makedirs(RESULTS_PKL_DIR, exist_ok=True)
 
+    # 【新增功能】检查 instruction_list 的前5个内容
+    # ==================================================================
+    print("\n--- 检查 instruction_list 前5项内容 ---")
+    if instruction_list and len(instruction_list) > 0:
+        # 只遍历前5个，如果列表不足5个，则遍历全部
+        for i, instruction in enumerate(instruction_list[:5]):
+            # 打印前200个字符作为预览，避免内容过长刷屏
+            print(f"[{i+1}] {instruction[:200]}...")
+    else:
+        print("instruction_list 为空或未成功加载。")
+    print("----------------------------------------\n")
+    # ==================================================================
+
     # =====================================================================================
     # 3. 加载目标模型
     # =====================================================================================
     print(f"\n>>> 步骤3: 正在加载目标模型: {MODEL_PATH}...")
     model, tokenizer = load_model_and_tokenizer(MODEL_PATH, low_cpu_mem_usage=True, use_cache=False)
+    if 'llama-2' in MODEL_PATH:
+        tokenizer.pad_token = tokenizer.eos_token
+    
     model.to('cuda')
     model.requires_grad_(False)
     conv_template = load_conversation_template(TEMPLATE_NAME)
@@ -85,10 +96,11 @@ def main():
             np.random.seed(seed)
             torch.manual_seed(seed)
             
-            _ , detailed_log = demo_level_random_search(
+            _ , detailed_log = optimization_based_search(
                 model=model, tokenizer=tokenizer, conv_template=conv_template,
                 instruction=target_instruction, target=TARGET_RESPONSE_START,
-                demo_pool=demo_pool, num_steps=NUM_STEPS, shots=SHOTS, batch_size=BATCH_SIZE
+                demo_pool=demo_pool, num_steps=NUM_STEPS, shots=SHOTS, 
+                batch_size=BATCH_SIZE, top_k=TOP_K
             )
 
             log_filename = f"{RESULTS_PKL_DIR}/seed_{seed}_pool_{len(demo_pool)}_shots_{SHOTS}_index_{target_index}.pkl"
@@ -124,7 +136,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
