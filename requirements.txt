@@ -13,5 +13,3 @@ fastchat
 # Install transformers directly from the main GitHub branch
 -e git+https://github.com/huggingface/transformers.git#egg=transformers
 
-# Install the core llm-attacks library, which I-FSJ depends on
--e git+https://github.com/llm-attacks/llm-attacks.git#egg=llm-attacks
