@@ -26,7 +26,7 @@ import numpy as np
 from llm_attacks.minimal_gcg.opt_utils import load_model_and_tokenizer
 from llm_attacks.minimal_gcg.string_utils import load_conversation_template
 
-from data_manager import prepare_harmbench_instructions, load_demo_pool_from_file
+from data_manager import prepare_harmbench_instructions, download_and_load_demo_pool
 from FsAttack import demo_level_random_search
 
 def main():
@@ -124,4 +124,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
