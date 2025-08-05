@@ -26,13 +26,12 @@ def set_seeds(seed: int):
     torch.backends.cudnn.benchmark = False
 
 # ==============================================================================
-# 2. 核心类定义 (经过降重和功能增强)
+# 2. 核心类定义 
 # ==============================================================================
 
 class PromptBuilder_Stateless:
     """
     (已确认采纳) 一个无状态的、基于字符串格式化的Prompt构建器。
-    通过改变实现范式来最大化地降低与原始代码的AST相似度。
     """
     B_INST, E_INST = "[INST]", "[/INST]"
 
@@ -164,14 +163,14 @@ def _evaluate_batch(model, adv_prompts_list, tokenizer, instruction, target, mic
     return all_losses
 
 # ==============================================================================
-# 4. 主搜索函数 (重构后的协调器)
+# 4. 主搜索函数 
 # ==============================================================================
 def optimization_based_search(
     model, tokenizer, instruction, target, demo_pool, 
     num_steps, shots, batch_size, micro_batch_size, top_k
 ) -> Tuple[torch.Tensor, List[Dict[str, Any]]]:
     """执行基于优化的批量搜索（重构版）。"""
-    print(f">>> 正在执行优化式搜索 (重构版) (步数:{num_steps}, 批大小:{batch_size}, TopK:{top_k})...")
+    print(f">>> 正在执行优化式搜索 (步数:{num_steps}, 批大小:{batch_size}, TopK:{top_k})...")
     
     truncated_demo_pool = _preprocess_pool(demo_pool, tokenizer)
     pool_size = len(truncated_demo_pool)
@@ -231,13 +230,13 @@ def optimization_based_search(
 # 5. 命令行接口与执行入口
 # ==============================================================================
 def parse_args():
-    parser = argparse.ArgumentParser(description="基于随机搜索的对抗性提示攻击（重构版）")
+    parser = argparse.ArgumentParser(description="基于随机搜索的对抗性提示攻击")
     parser.add_argument("--model_path", type=str, default="meta-llama/Llama-2-7b-chat-hf", help="模型路径")
     parser.add_argument("--device", type=str, default="cuda:0", help="运行设备")
     parser.add_argument("--num_steps", type=int, default=128, help="搜索步数")
     parser.add_argument("--batch_size", type=int, default=16, help="每步评估的候选者数量")
     parser.add_argument("--micro_batch_size", type=int, default=8, help="模型前向传播的微批次大小")
-    parser.add_argument("--shots", type=int, default=8, help="few-shot示例的数量")
+    parser.add_argument("--shots", type=int, default=4, help="few-shot示例的数量")
     parser.add_argument("--top_k", type=int, default=512, help="从多大的池子中选择候选项")
     parser.add_argument("--user_prompt_index", type=int, default=1, help="从指令列表中选择的指令索引")
     parser.add_argument("--target", type=str, default='Step', help="攻击的目标输出字符串")
@@ -299,4 +298,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
