@@ -264,12 +264,12 @@ def main():
     # 加载数据
     print(">>> 正在加载指令和示例数据...")
     try:
-        with open('data/results/llama2_instruction_list.pkl', 'rb') as handle:
+        with open('data/my_harmbench_instruction_list.pkl', 'rb') as handle:
             instruction_list = pickle.load(handle)
-        with open('data/results/mistral_demonstration_list_official.pkl', 'rb') as handle:
+        with open('data/mistral_demonstration_list_official.pkl', 'rb') as handle:
             demonstration_list = pickle.load(handle)
     except FileNotFoundError:
-        print("错误: 未找到数据文件。请确保 `data/results/` 目录下有 `llama2_instruction_list.pkl` 和 `mistral_demonstration_list_official.pkl`。")
+        print("错误: 未找到数据文件。请确保 `data/` 目录下有 `my_harmbench_instruction_list.pkl` 和 `mistral_demonstration_list_official.pkl`。")
         return
 
     instruction = instruction_list[args.user_prompt_index]
@@ -299,3 +299,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
