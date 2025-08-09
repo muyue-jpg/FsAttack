@@ -77,7 +77,7 @@ class SmartAttackSuccessChecker:
 # ==============================================================================
 class GeneticAlgorithmSearcher_vLLM:
     """使用 vLLM 加速的遗传算法搜索器"""
-    def __init__(self, llm_engine, tokenizer, instruction, target, demo_pool, 
+    def __init__(self, llm_engine, tokenizer, instruction, target, demo_pool,
                  shots, population_size, generations, crossover_rate, mutation_rate,
                  elitism_count):
         self.llm = llm_engine
@@ -90,17 +90,17 @@ class GeneticAlgorithmSearcher_vLLM:
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
         self.elitism_count = elitism_count
-        
+
         self.truncated_demo_pool, self.pool_size = self._preprocess_pool(demo_pool, tokenizer)
         self.checker = SmartAttackSuccessChecker()
-        
+
         self.population = self._initialize_population()
         self.fitness_cache = {}
         self.best_individual = None
         self.best_fitness = float('inf')
         self.log_list = []
         self.success_history = []
-        
+
         # 为vLLM准备目标token IDs
         self.target_token_ids = self.tokenizer.encode(self.target.strip(), add_special_tokens=False)
 
@@ -131,7 +131,7 @@ class GeneticAlgorithmSearcher_vLLM:
     def _evaluate_population_with_vllm(self, population: List[torch.Tensor]) -> List[float]:
         """【核心优化】使用vLLM一次性评估整个种群的适应度"""
         fitness_scores = []
-        
+
         # 找出需要新计算的个体
         individuals_to_evaluate = []
         keys_to_evaluate = []
@@ -140,43 +140,48 @@ class GeneticAlgorithmSearcher_vLLM:
             if key not in self.fitness_cache:
                 individuals_to_evaluate.append(ind)
                 keys_to_evaluate.append(key)
-        
+
         if individuals_to_evaluate:
             # 为需要评估的个体构建prompts
             prompts_for_loss, _ = self._build_prompts_for_population(individuals_to_evaluate)
-            
+
             # 使用vLLM的logprobs功能来计算损失
             sampling_params = SamplingParams(max_tokens=len(self.target_token_ids), temperature=0, logprobs=1)
             outputs = self.llm.generate(prompts_for_loss, sampling_params, use_tqdm=False)
-            
+
             new_losses = []
             for output in outputs:
                 total_loss = 0.0
                 # 遍历目标序列的每一个token来计算损失
                 for i, target_tok_id in enumerate(self.target_token_ids):
                     # 获取在第i步预测的所有token的概率分布
-                    logprob_dict = output.outputs[0].logprobs[i]
-                    # 获取目标token的log probability
-                    target_logprob = logprob_dict.get(target_tok_id)
-                    if target_logprob is not None:
-                        total_loss -= target_logprob.logprob # 累加负对数似然
+                    # Handle cases where logprobs might be shorter than expected
+                    if i < len(output.outputs[0].logprobs):
+                        logprob_dict = output.outputs[0].logprobs[i]
+                        # 获取目标token的log probability
+                        target_logprob = logprob_dict.get(target_tok_id)
+                        if target_logprob is not None:
+                            total_loss -= target_logprob.logprob # 累加负对数似然
+                        else:
+                            # 如果目标token不在logprobs字典里（概率极低），给一个很大的惩罚值
+                            total_loss += 50
                     else:
-                        # 如果目标token不在logprobs字典里（概率极低），给一个很大的惩罚值
-                        total_loss += 50 
+                        # If the generated sequence is shorter than the target, penalize heavily
+                        total_loss += 50
                 new_losses.append(total_loss / len(self.target_token_ids))
+
 
             # 更新缓存
             for key, loss in zip(keys_to_evaluate, new_losses):
                 self.fitness_cache[key] = loss
-        
+
         # 从缓存中收集所有个体的适应度
         for ind in population:
             key = tuple(ind.tolist())
             fitness_scores.append(self.fitness_cache[key])
-            
+
         return fitness_scores
 
-    # ... (选择, 交叉, 变异等函数 _selection, _crossover, _mutate, _create_new_generation 保持不变) ...
     def _selection(self, fitness_scores: List[float]) -> List[torch.Tensor]:
         selected = []
         tournament_size = max(2, self.population_size // 10)
@@ -216,19 +221,18 @@ class GeneticAlgorithmSearcher_vLLM:
         best_idx = np.argmin(fitness_scores)
         best_individual_in_gen = self.population[best_idx]
         best_fitness_in_gen = fitness_scores[best_idx]
-        
+
         if best_fitness_in_gen < self.best_fitness:
             self.best_fitness = best_fitness_in_gen
             self.best_individual = best_individual_in_gen.clone()
-        
-        # 【vLLM 修改】使用vLLM生成最终回复用于日志
+
         _, prompts_for_gen = self._build_prompts_for_population([self.best_individual])
         sampling_params = SamplingParams(max_tokens=256, temperature=0.7, top_p=0.9)
         outputs = self.llm.generate(prompts_for_gen, sampling_params, use_tqdm=False)
         response_text = outputs[0].outputs[0].text.strip()
-        
+
         is_success = self.checker.is_successful(response_text, self.instruction)
-        
+
         log_entry = {
             'generation': gen,
             'best_fitness': best_fitness_in_gen,
@@ -241,7 +245,7 @@ class GeneticAlgorithmSearcher_vLLM:
         self.log_list.append(log_entry)
         if is_success:
             self.success_history.append(log_entry)
-        
+
         self.pbar.set_postfix({
             "最佳损失": f"{self.best_fitness:.4f}",
             "成功次数": f"{len(self.success_history)}"
@@ -250,12 +254,12 @@ class GeneticAlgorithmSearcher_vLLM:
     def run(self):
         print(f">>> 正在执行遗传算法搜索 (vLLM加速版)...")
         self.pbar = tqdm(range(self.generations), desc="遗传算法优化进度")
-        
+
         for gen in self.pbar:
             fitness_scores = self._evaluate_population_with_vllm(self.population)
             self._log_generation(gen, fitness_scores)
             self.population = self._create_new_generation(fitness_scores)
-        
+
         if self.success_history:
             best_success = min(self.success_history, key=lambda x: x['best_fitness'])
             final_individual = torch.tensor(best_success['demos_indices'])
@@ -263,7 +267,7 @@ class GeneticAlgorithmSearcher_vLLM:
         else:
             print("⚠️ 未找到成功攻击，返回损失最低的样本。")
             final_individual = self.best_individual
-        
+
         print(f"\n>>> 遗传算法优化完成. 最终最优损失: {self.best_fitness:.4f}")
         return final_individual, self.log_list
 
@@ -272,10 +276,9 @@ class GeneticAlgorithmSearcher_vLLM:
 # ==============================================================================
 def parse_args():
     parser = argparse.ArgumentParser(description="基于遗传算法和vLLM的对抗性提示攻击")
-    # ... (参数定义保持不变) ...
     parser.add_argument("--model_path", type=str, default="meta-llama/Llama-2-7b-chat-hf", help="模型路径")
     parser.add_argument("--num_steps", type=int, default=100, help="遗传算法的代数")
-    parser.add-argument("--shots", type=int, default=8, help="few-shot示例的数量")
+    parser.add_argument("--shots", type=int, default=8, help="few-shot示例的数量")
     parser.add_argument("--user_prompt_index", type=int, default=1, help="指令索引")
     parser.add_argument("--target", type=str, default='Step', help="目标输出字符串")
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
@@ -289,14 +292,11 @@ def main():
     args = parse_args()
     print(">>> 参数配置:", args)
     set_seeds(args.seed)
-    
-    # 【vLLM 修改】加载vLLM引擎和Tokenizer
+
     print(f">>> 正在加载vLLM引擎: {args.model_path}")
-    # tensor_parallel_size 可以根据您的GPU数量调整
     llm = LLM(model=args.model_path, tensor_parallel_size=1, trust_remote_code=True)
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, use_fast=False)
-    
-    # 加载数据
+
     print(">>> 正在加载指令和示例数据...")
     with open('data/my_harmbench_instruction_list.pkl', 'rb') as f:
         instruction_list = pickle.load(f)
@@ -306,7 +306,6 @@ def main():
     instruction = instruction_list[args.user_prompt_index]
     print(f">>> 选定的攻击指令 (索引 {args.user_prompt_index})")
 
-    # 初始化并运行遗传算法搜索器
     searcher = GeneticAlgorithmSearcher_vLLM(
         llm_engine=llm,
         tokenizer=tokenizer,
@@ -322,7 +321,6 @@ def main():
     )
     best_indices, log_list = searcher.run()
 
-    # 保存结果
     save_dir = "final_results_vllm"
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, f"log_index_{args.user_prompt_index}_seed_{args.seed}.pkl")
