@@ -31,7 +31,7 @@ def set_seeds(seed: int):
 
 class PromptBuilder_Stateless:
     """
-    (已确认采纳) 一个无状态的、基于字符串格式化的Prompt构建器。
+    一个无状态的、基于字符串格式化的Prompt构建器。
     """
     B_INST, E_INST = "[INST]", "[/INST]"
 
@@ -61,7 +61,7 @@ class PromptBuilder_Stateless:
         if target_end_index <= len(input_ids):
             labels[target_start_index:target_end_index] = input_ids[target_start_index:target_end_index]
         else:
-            print(f"警告: Target slice 索引计算越界! target_end_index={target_end_index}, len={len(input_ids)}")
+            print(f"warning: Target slice Index calculation out of bounds! target_end_index={target_end_index}, len={len(input_ids)}")
             # Fallback: a less precise but safe slice
             safe_end_index = min(target_end_index, len(input_ids))
             labels[target_start_index:safe_end_index] = input_ids[target_start_index:safe_end_index]
@@ -110,15 +110,15 @@ class SmartAttackSuccessChecker:
 # ==============================================================================
 def _preprocess_pool(demo_pool: List[str], tokenizer: AutoTokenizer) -> List[str]:
     """预处理和截断对齐示例池。"""
-    print(">>> 正在预处理和截断对齐示例池...")
+    print(">>> Preprocessing and truncating the alignment example pool...")
     sep = ' ' + ''.join(['[/INST]'] * 4) + ''
     toks_list = [tokenizer.encode(d, add_special_tokens=False) for d in demo_pool]
     if not toks_list:
-        raise ValueError("示例池为空，无法继续。")
+        raise ValueError("The sample pool is empty, unable to continue。")
     min_len = min(len(t) for t in toks_list)
     
     truncated_demo_pool = [tokenizer.decode(t[:min_len]) + sep for t in toks_list]
-    print(f">>> 示例池处理完毕，所有示例已对齐到长度: {min_len} tokens。")
+    print(f">>> Sample pooling is complete and all samples are aligned to length: {min_len} tokens。")
     return truncated_demo_pool
 
 def _create_candidate_generator(base_indices, pool_size, top_k, shots, seen_dict, device):
@@ -209,7 +209,7 @@ def extract_harmful_core(generated_text: str, instruction: str) -> str:
 
 
 # ==============================================================================
-# 4. 遗传算法实现 (替换原有的随机搜索)
+# 4. 遗传算法实现
 # ==============================================================================
 class GeneticAlgorithmSearcher:
     """实现遗传算法来搜索最优的演示组合"""
@@ -403,14 +403,14 @@ class GeneticAlgorithmSearcher:
         self.pbar.set_postfix({
             "最佳损失": f"{self.best_fitness:.4f}",
             "当前代损失": f"{best_fitness:.4f}",
-            "是否成功": "✅" if is_success else "❌"
+            "是否成功": "success" if is_success else "wrong"
         })
 
 
     def run(self) -> Tuple[torch.Tensor, List[Dict[str, Any]]]:
         """执行遗传算法优化"""
-        print(f">>> 正在执行遗传算法搜索 (代数:{self.generations}, 种群大小:{self.population_size})...")
-        self.pbar = tqdm(range(self.generations), desc="遗传算法优化进度")
+        print(f">>> Performing genetic algorithm search (generations:{self.generations}, population_size:{self.population_size})...")
+        self.pbar = tqdm(range(self.generations), desc="Genetic algorithm optimization progress")
         
         for gen in self.pbar:
             # 评估当前种群
@@ -432,10 +432,10 @@ class GeneticAlgorithmSearcher:
             
             # 更新进度条
             self.pbar.set_postfix({
-                "最佳损失": f"{self.best_fitness:.4f}",
-                "当前代数最佳": f"{best_in_gen_fitness:.4f}",
-                "平均损失": f"{np.mean(fitness_scores):.4f}",
-                "成功次数": f"{len(self.success_history)}"
+                "best_fitness": f"{self.best_fitness:.4f}",
+                "best_in_gen_fitness": f"{best_in_gen_fitness:.4f}",
+                "fitness_scores": f"{np.mean(fitness_scores):.4f}",
+                "success_history": f"{len(self.success_history)}"
             })
         
         # 最终选择策略：优先选择成功攻击中最优的
@@ -443,14 +443,14 @@ class GeneticAlgorithmSearcher:
             # 找到损失最低的成功攻击
             best_success = min(self.success_history, key=lambda x: x['best_fitness'])
             best_indices = torch.tensor(best_success['demos_indices'])
-            print(f"✨ 找到{len(self.success_history)}次成功攻击，选择第{best_success['generation']}代的最优成功样本")
-            print(f"  核心有害内容: {best_success['harmful_core']}")
+            print(f" find{len(self.success_history)}success attack，Select{best_success['generation']}the best successful sample of the generation")
+            print(f"  Core harmful content: {best_success['harmful_core']}")
             final_individual = best_indices
         else:
-            print("⚠️ 未找到成功攻击，返回损失最低的样本")
+            print("If no successful attack is found, the sample with the lowest loss is returned.")
             final_individual = self.best_individual
         
-        print(f"\n>>> 遗传算法优化完成. 最终最优损失: {self.best_fitness:.4f}")
+        print(f"\n>>> finish. final best_fitness: {self.best_fitness:.4f}")
         return final_individual, self.log_list
 
 
@@ -490,25 +490,23 @@ def optimization_based_search(
         return searcher.run()
     
     else:
-        # 保留原有的随机搜索实现
-        print(f">>> 正在执行随机搜索 (步数:{num_steps}, 批大小:{batch_size}, TopK:{top_k})...")
-        # ... 原有随机搜索代码保持不变 ...
+        print(f">>> wrong")
 
 
 # ==============================================================================
 # 6. 修改命令行参数
 # ==============================================================================
 def parse_args():
-    parser = argparse.ArgumentParser(description="基于优化的对抗性提示攻击")
+    parser = argparse.ArgumentParser(description="Optimization-based adversarial hint attacks")
     
     # 模型参数
-    parser.add_argument("--model_path", type=str, default="meta-llama/Llama-2-7b-chat-hf", help="模型路径")
-    parser.add_argument("--device", type=str, default="cuda:0", help="运行设备")
+    parser.add_argument("--model_path", type=str, default="meta-llama/Llama-2-7b-chat-hf", help="Model Path")
+    parser.add_argument("--device", type=str, default="cuda:0", help="Running equipment")
     
     # 算法选择
     parser.add_argument("--algorithm", type=str, default="random", 
-                       choices=["random", "genetic"], 
-                       help="搜索算法: random(随机搜索) 或 genetic(遗传算法)")
+                       choices=["genetic_0", "genetic"], 
+                       help="Search Algorithms: genetic_0(Genetic Algorithm) 或 genetic(Genetic Algorithm Update)")
     
     # 通用搜索参数
     parser.add_argument("--num_steps", type=int, default=128, help="搜索步数/代数")
@@ -668,5 +666,6 @@ def analyze_results(logs: List[Dict]) -> Dict:
 
 if __name__ == "__main__":
     main()
+
 
 
