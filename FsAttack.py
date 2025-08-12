@@ -398,6 +398,8 @@ class GeneticAlgorithmSearcher:
         # 添加到成功历史（如果是成功攻击）
         if is_success:
             self.success_history.append(log_entry)  # 保存完整日志
+            print(f"   Attack Succeeded at Generation {gen}!")
+            print(f"   Response: {response_text}\n")
         
         # 更新进度条显示
         self.pbar.set_postfix({
@@ -666,6 +668,7 @@ def analyze_results(logs: List[Dict]) -> Dict:
 
 if __name__ == "__main__":
     main()
+
 
 
 
