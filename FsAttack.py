@@ -401,9 +401,9 @@ class GeneticAlgorithmSearcher:
         
         # 更新进度条显示
         self.pbar.set_postfix({
-            "最佳损失": f"{self.best_fitness:.4f}",
-            "当前代损失": f"{best_fitness:.4f}",
-            "是否成功": "success" if is_success else "wrong"
+            "best_fitness": f"{self.best_fitness:.4f}",
+            "currunt_fitness": f"{best_fitness:.4f}",
+            "result": "success" if is_success else "wrong"
         })
 
 
@@ -539,7 +539,7 @@ def main():
     set_seeds(args.seed)
     
     # 加载模型和tokenizer
-    print(f">>> 正在加载模型: {args.model_path}")
+    print(f">>> loading_model: {args.model_path}")
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
         torch_dtype=torch.float16,
@@ -550,7 +550,7 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     
     # 加载数据
-    print(">>> 正在加载指令和示例数据...")
+    print(">>> Loading instructions and sample data...")
     try:
         with open('data/my_harmbench_instruction_list.pkl', 'rb') as handle:
             instruction_list = pickle.load(handle)
@@ -561,7 +561,7 @@ def main():
         return
 
     instruction = instruction_list[args.user_prompt_index]
-    print(f">>> 选定的攻击指令 (索引 {args.user_prompt_index}): {instruction}")
+    # print(f">>> 选定的攻击指令 (索引 {args.user_prompt_index}): {instruction}")
 
     # 运行攻击
     best_indices, log_list = optimization_based_search(
@@ -607,22 +607,22 @@ def analyze_results(logs: List[Dict]) -> Dict:
     # 1. 基本统计
     success_gens = [log for log in logs if log['judge']]
     success_rate = len(success_gens)/len(logs)*100
-    print(f"✅ 总成功率: {len(success_gens)}/{len(logs)} ({success_rate:.1f}%)")
+    print(f"总成功率: {len(success_gens)}/{len(logs)} ({success_rate:.1f}%)")
     
     # 2. 时间线分析
     first_success = next((log for log in logs if log['judge']), None)
     last_success = next((log for log in reversed(logs) if log['judge']), None)
     
     if first_success:
-        print(f"⏱️ 首次成功: 第{first_success['generation']}代")
-        print(f"⏱️ 最近成功: 第{last_success['generation']}代" if last_success else "⏱️ 最近成功: 无")
+        print(f"首次成功: 第{first_success['generation']}代")
+        print(f"最近成功: 第{last_success['generation']}代" if last_success else "最近成功: 无")
     
     # 3. 找到最优成功攻击
     successful_logs = [log for log in logs if log['judge']]
     best_success = min(successful_logs, key=lambda x: x['best_fitness']) if successful_logs else None
     
     if best_success:
-        print(f"\n🏆 最优成功攻击 (第{best_success['generation']}代):")
+        print(f"  最优成功攻击 (第{best_success['generation']}代):")
         print(f"  损失值: {best_success['best_fitness']:.4f}")
         print(f"  演示索引: {best_success['demos_indices']}")
         print(f"  完整响应:\n{best_success['full_response']}")
@@ -634,7 +634,7 @@ def analyze_results(logs: List[Dict]) -> Dict:
     max_fitness = max(fitness_values)
     avg_fitness = sum(fitness_values)/len(fitness_values)
     
-    print(f"\n📊 损失变化分析:")
+    print(f"  损失变化分析:")
     print(f"  最小损失: {min_fitness:.4f}")
     print(f"  最大损失: {max_fitness:.4f}")
     print(f"  平均损失: {avg_fitness:.4f}")
@@ -653,7 +653,7 @@ def analyze_results(logs: List[Dict]) -> Dict:
                 success_streaks.append(consecutive_success)
             consecutive_success = 0
     
-    print(f"\n🔁 成功持续性:")
+    print(f"  成功持续性:")
     print(f"  最长连续成功: {max_consecutive}代")
     print(f"  成功波段数量: {len(success_streaks)}")
     if success_streaks:
@@ -666,6 +666,7 @@ def analyze_results(logs: List[Dict]) -> Dict:
 
 if __name__ == "__main__":
     main()
+
 
 
 
